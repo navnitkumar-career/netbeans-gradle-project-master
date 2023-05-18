@@ -1,0 +1,310 @@
+import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.testing.Test
+
+def systemProps = System.getProperties()
+systemProps.remove('socksProxyHost')
+systemProps.remove('socksProxyPort')
+
+afterProject { org.gradle.api.Project project ->
+    if (project == null) {
+        return;
+    }
+
+    try {
+        configureProject(project)
+    } catch (Throwable ex) {
+        project.println "Warning: Init script added by NB for project ${project.path} has failed with an exception: ${ex}"
+    }
+}
+
+void configureProject(def project) {
+    def tasks = project.tasks
+    def runTask =  tasks.findByName('run')
+    def debugTask = tasks.findByName('debug')
+
+    boolean hasRun = runTask != null
+    boolean hasDebug = debugTask != null
+    boolean hasAppPlugin = project.plugins.hasPlugin("application")
+
+    if (tasks.findByName('classes') != null && project.hasProperty('sourceSets')) {
+        def definedMainClass = project.hasProperty('mainClass') ? project.mainClass : ''
+        if (definedMainClass == null) definedMainClass = '';
+        definedMainClass = definedMainClass.toString()
+
+        definedMainClass = updateMainClass(project, definedMainClass, hasAppPlugin)
+
+        def jvmLineArgs = getJvmLineArgs(project)
+        def cmdLineArgs = getCmdLineArgs(project)
+
+        def configJavaExec = { JavaExec task ->
+            task.main = definedMainClass
+            task.classpath = project.sourceSets.main.runtimeClasspath
+            task.standardInput = System.in
+            task.args = cmdLineArgs
+            task.jvmArgs = jvmLineArgs
+        }
+
+        def updateJavaExec = { JavaExec task ->
+            if (!cmdLineArgs.isEmpty()) {
+                task.args = cmdLineArgs
+            }
+            if (hasAppPlugin) {
+                task.jvmArgs(task.jvmArgs)
+            }
+            if (!jvmLineArgs.isEmpty()) {
+                task.jvmArgs(jvmLineArgs)
+            }
+        }
+
+        if (!hasRun) {
+            if ('' != definedMainClass) {
+                project.task ('run', dependsOn: project.classes, type: JavaExec) {
+                    configJavaExec(it)
+                }
+            }
+            else {
+                project.task('run').doLast {
+                    project.println 'Cannot execute run because the property "mainClass" is not defined or empty.'
+                }
+            }
+        }
+        else if (runTask instanceof JavaExec) {
+            updateJavaExec(runTask)
+        }
+
+        if (!hasDebug) {
+            if ('' != definedMainClass) {
+                project.task ('debug', dependsOn: project.classes, type: JavaExec) {
+                    configJavaExec(it)
+                    debug = true
+                }
+            }
+            else {
+                project.task('debug').doLast {
+                    project.println 'Cannot execute debug because the property "mainClass" is not defined or empty.'
+                }
+            }
+        }
+        else if (debugTask instanceof JavaExec) {
+            updateJavaExec(debugTask)
+        }
+    }
+    else {
+        if (!hasRun) {
+            createReportingRunTask(project, 'run')
+        }
+        if (!hasDebug) {
+            createReportingRunTask(project, 'debug')
+        }
+    }
+
+    if (project.hasProperty('enableJacocoXmlReport') &&  project.plugins.hasPlugin('jacoco')) {
+        String enableXml = project.enableJacocoXmlReport?.toString();
+        if (enableXml != null && enableXml.equalsIgnoreCase('true')) {
+            def task = project.tasks.findByName('jacocoTestReport')
+            if (task != null) {
+                task.reports.xml.enabled true
+            }
+        }
+    }
+
+    updateDebugTaskArgs(project)
+}
+
+void createReportingRunTask(def project, String taskName) {
+    project.task(taskName, {
+        ext.main = ''
+        doLast {
+            project.println "Cannot execute ${taskName} because the project does not have classes or source sets."
+        }
+    })
+}
+
+String updateMainClass(def project, String srcMainClass, boolean hasAppPlugin) {
+    if ('' != srcMainClass) {
+        if (hasAppPlugin) {
+            project.mainClassName = srcMainClass
+        }
+    }
+    else {
+        if (hasAppPlugin) {
+            return project.mainClassName
+        }
+    }
+    return srcMainClass
+}
+
+List<String> splitProjectProperty(def project, def propertyName) {
+    def value = project.hasProperty(propertyName) ? project[propertyName] : ''
+    value = value?.toString()?.trim()
+    if (value == null || value == '') {
+        return []
+    }
+    else {
+        return splitArgs(value)
+    }
+}
+
+List<String> getCmdLineArgs(def project) {
+    return splitProjectProperty(project, 'cmdLineArgs')
+}
+
+List<String> getJvmLineArgs(def project) {
+    return splitProjectProperty(project, 'jvmLineArgs')
+}
+
+void updateDebugTaskArgs(def project) {
+    List debuggerAttachArgs = null;
+    if (project.hasProperty('debuggerJpdaPort')) {
+        def debuggerPort = project.debuggerJpdaPort
+        debuggerAttachArgs = ['-Xdebug', "-Xrunjdwp:transport=dt_socket,server=n,address=${debuggerPort}".toString()]
+    }
+
+    if (debuggerAttachArgs == null || !project.hasProperty('debuggedTaskName')) {
+        return
+    }
+
+    String debuggedTaskName = project.debuggedTaskName.toString()
+    String localTaskName = debuggedTaskName
+
+    int projectPathSepIndex = debuggedTaskName.lastIndexOf(':')
+    if (projectPathSepIndex >= 0) {
+        String projectPath = normalizePath(debuggedTaskName.substring(0, projectPathSepIndex).trim())
+        if (projectPath != project.path) {
+            return
+        }
+
+        localTaskName = debuggedTaskName.substring(projectPathSepIndex + 1).trim()
+    }
+
+    def task = project.tasks.findByName(localTaskName)
+    if (task instanceof JavaExec) {
+        def cmdLineArgs = getCmdLineArgs(project)
+        if (!cmdLineArgs.isEmpty()) {
+            task.args = cmdLineArgs
+        }
+    }
+    if ((task instanceof JavaExec) || (task instanceof Test)) {
+        updateJvmArgs(task, debuggerAttachArgs)
+    }
+}
+
+String normalizePath(String rawPath) {
+    boolean changed = false
+
+    StringBuilder result = new StringBuilder(rawPath.length())
+    if (!rawPath.startsWith(':')) {
+        result.append(':')
+        changed = true
+    }
+
+    boolean prevColon = false
+    for (int i = 0; i < rawPath.length(); i++) {
+        char ch = rawPath.getAt(i)
+        boolean colon = ch == ':'
+        if (!colon || !prevColon) {
+            result.append(ch)
+        }
+        else {
+            changed = true
+        }
+        prevColon = colon
+    }
+
+    return changed ? result.toString() : rawPath
+}
+
+void updateJvmArgs(def task, List additionalArgs) {
+    // Note: The list might contain non-string instances, so first convert them.
+    Set additionalArgsSet = new LinkedHashSet(additionalArgs*.toString())
+    List currentArgs = task.jvmArgs;
+    for (def arg: task.jvmArgs) {
+        additionalArgsSet.remove(arg?.toString())
+    }
+    task.jvmArgs(additionalArgsSet)
+}
+
+List<String> splitArgs(String cmdLine) {
+    char quoteChar = '"'
+    List<String> result = new ArrayList<>();
+    int index = indexOfNonWs(cmdLine, 0);
+    while (index < cmdLine.length()) {
+        if (cmdLine.charAt(index) == quoteChar) {
+            int argStartIndex = index + 1;
+            index = unescapedIndexOf(cmdLine, argStartIndex, quoteChar);
+
+            int argEndIndex;
+            if (index < 0) {
+                index = cmdLine.length();
+                argEndIndex = index;
+            }
+            else {
+                argEndIndex = index;
+                index++;
+            }
+
+            result.add(unescapeString(cmdLine.substring(argStartIndex, argEndIndex)));
+        }
+        else {
+            int argStartIndex = index;
+            index = indexOfWs(cmdLine, index);
+            result.add(cmdLine.substring(argStartIndex, index));
+        }
+
+        index = indexOfNonWs(cmdLine, index);
+    }
+    return result;
+}
+
+int indexOfNonWs(String str, int startIndex) {
+    return indexOfWs(str, startIndex, false);
+}
+
+int indexOfWs(String str, int startIndex) {
+    return indexOfWs(str, startIndex, true);
+}
+
+int indexOfWs(String str, int startIndex, boolean findWs) {
+    char spaceChar = ' '
+    for (int i = startIndex; i < str.length(); i++) {
+        if ((str.charAt(i) <= spaceChar) == findWs) {
+            return i;
+        }
+    }
+    return str.length();
+}
+
+int unescapedIndexOf(String str, int startIndex, char toFind) {
+    char escapeChar = '\\'
+    int i = startIndex;
+    while (i < str.length()) {
+        char ch = str.charAt(i);
+        if (ch == toFind) {
+            return i;
+        }
+
+        if (ch == escapeChar) i += 2;
+        else i++;
+    }
+    return -1;
+}
+
+String unescapeString(String str) {
+    char escapeChar = '\\'
+    StringBuilder result = new StringBuilder(str.length());
+    int i = 0;
+    while (i < str.length()) {
+        char ch = str.charAt(i);
+        if (ch == escapeChar) {
+            if (i + 1 < str.length()) {
+                result.append(str.charAt(i + 1));
+                i += 2;
+                continue;
+            }
+        }
+
+        result.append(ch);
+        i++;
+    }
+    return result.toString();
+}

@@ -1,0 +1,169 @@
+import java.nio.file.*
+
+apply plugin: 'nb-gradle-nbm'
+apply plugin: 'jacoco'
+apply plugin: 'custom-java-compilers'
+apply plugin: 'nb-gradle-maven-publish'
+apply plugin: 'nbm-dependency-verifier'
+
+jacocoTestReport {
+    reports {
+        xml.enabled true
+    }
+}
+
+ext.scriptFile = { String fileName ->
+    return new File(new File(rootDir, 'gradle'), fileName)
+}
+
+sourceCompatibility = '1.8'
+targetCompatibility = sourceCompatibility
+
+String netbeansVersion = 'dev-SNAPSHOT';
+
+repositories {
+    mavenCentral()
+    String nbRepo = netbeansVersion.endsWith('-SNAPSHOT')
+            ? 'http://bits.netbeans.org/netbeans/trunk/new-maven-snapshot'
+            : 'http://bits.netbeans.org/nexus/content/groups/netbeans'
+    maven { url nbRepo }
+    jcenter()
+    maven { url 'http://repo.gradle.org/gradle/libs-releases-local' }
+}
+
+compileJava.options.sourcepath = sourceSets.main.resources.sourceDirectories
+
+test.systemProperties['org.netbeans.gradle.runningTests'] = 'true'
+
+def tryGetProperty = { String name, String defaultValue ->
+    return org.netbeans.gradle.build.PropertyUtils.getStringProperty(project, name, defaultValue)
+}
+
+jar.manifest {
+    attributes(['OpenIDE-Module-Layer': 'org/netbeans/gradle/project/layer.xml'])
+}
+
+nbm {
+    moduleAuthor = 'Attila Kelemen'
+    licenseFile = 'license.txt'
+    moduleName = 'org.netbeans.gradle.project'
+    implementationVersion = specificationVersion
+    moduleInstall = 'org.netbeans.gradle.project.NbGradleModuleInstall'
+    localizingBundle = 'org/netbeans/gradle/project/Bundle.properties'
+    friendPackages {
+        add 'org.netbeans.gradle.project.api.**'
+        add 'org.netbeans.gradle.model.api.**'
+        add 'org.gradle.api.util.**'
+        add 'org.gradle.tooling.**'
+        add 'org.jtrim2.**'
+    }
+
+    requires('cnb.org.netbeans.modules.groovy.kit')
+    requires('cnb.org.netbeans.modules.java.j2seproject')
+
+    keyStore {
+        keyStoreFile = tryGetProperty('nbGradlePluginKeyStore', null)
+        username = tryGetProperty('nbGradlePluginKeyStoreUser', 'kelemen')
+        password = tryGetProperty('nbGradlePluginKeyStorePass', '')
+    }
+}
+
+def netbeansModule = { String groupName, String moduleName ->
+    return [
+        group: groupName,
+        name: moduleName,
+        version: netbeansVersion
+    ]
+}
+
+def netbeansApi = { String moduleName ->
+    return netbeansModule('org.netbeans.api', moduleName)
+}
+
+dependencies {
+    providedCompile netbeansApi('org-netbeans-api-annotations-common')
+    providedCompile netbeansApi('org-netbeans-api-debugger')
+    providedCompile netbeansApi('org-netbeans-api-debugger-jpda')
+    providedCompile netbeansApi('org-netbeans-api-java')
+    providedCompile netbeansApi('org-netbeans-api-java-classpath')
+    providedCompile netbeansApi('org-netbeans-api-progress')
+    providedCompile netbeansApi('org-netbeans-api-progress-nb')
+    providedCompile netbeansApi('org-netbeans-api-templates')
+    providedCompile netbeansApi('org-netbeans-core-multiview')
+    providedCompile netbeansApi('org-netbeans-modules-editor-indent-project')
+    providedCompile netbeansApi('org-netbeans-modules-editor-lib2')
+    providedCompile netbeansApi('org-netbeans-modules-parsing-api')
+    providedCompile netbeansApi('org-netbeans-modules-java-platform')
+    providedCompile netbeansApi('org-netbeans-modules-java-project')
+    providedCompile netbeansApi('org-netbeans-modules-java-project-ui')
+    providedCompile netbeansApi('org-netbeans-modules-java-source')
+    providedCompile netbeansApi('org-netbeans-modules-java-source-base')
+    providedCompile netbeansApi('org-netbeans-modules-options-api')
+    providedCompile netbeansApi('org-netbeans-modules-projectapi')
+    providedCompile netbeansApi('org-netbeans-modules-projectuiapi')
+    providedCompile netbeansApi('org-netbeans-modules-projectuiapi-base')
+    providedCompile netbeansApi('org-netbeans-modules-queries')
+    providedCompile netbeansApi('org-openide-actions')
+    providedCompile netbeansApi('org-openide-awt')
+    providedCompile netbeansApi('org-openide-dialogs')
+    providedCompile netbeansApi('org-openide-filesystems')
+    providedCompile netbeansApi('org-openide-filesystems-nb')
+    providedCompile netbeansApi('org-openide-io')
+    providedCompile netbeansApi('org-openide-loaders')
+    providedCompile netbeansApi('org-openide-modules')
+    providedCompile netbeansApi('org-openide-nodes')
+    providedCompile netbeansApi('org-openide-text')
+    providedCompile netbeansApi('org-openide-util')
+    providedCompile netbeansApi('org-openide-util-lookup')
+    providedCompile netbeansApi('org-openide-util-ui')
+    providedCompile netbeansApi('org-openide-windows')
+    providedCompile netbeansApi('org-netbeans-libs-javacapi')
+    providedCompile netbeansApi('org-netbeans-modules-nbjunit')
+    providedCompile netbeansApi('org-netbeans-libs-junit4')
+    providedCompile netbeansApi('org-netbeans-core-multitabs')
+    providedCompile netbeansApi('org-netbeans-swing-tabcontrol')
+    providedCompile netbeansModule('org.netbeans.modules', 'org-netbeans-modules-java-api-common')
+    providedCompile netbeansModule('org.netbeans.modules', 'org-netbeans-modules-java-preprocessorbridge')
+    providedCompile netbeansModule('org.netbeans.modules', 'org-netbeans-modules-groovy-support')
+    providedCompile netbeansModule('org.netbeans.modules', 'org-netbeans-modules-gsf-testrunner')
+    providedCompile netbeansModule('org.netbeans.modules', 'org-netbeans-modules-gsf-testrunner-ui')
+    providedCompile netbeansModule('org.netbeans.modules', 'org-netbeans-modules-gsf-codecoverage')
+    providedCompile netbeansModule('org.netbeans.modules', 'org-netbeans-insane')
+    providedCompile files(customJavaCompilers.toolsJar)
+
+    compile 'org.slf4j:slf4j-api:1.7.2'
+    compile 'com.google.code.findbugs:jsr305:2.0.1'
+    compile project(':netbeans-gradle-default-models')
+
+    compile 'com.google.guava:guava:19.0'
+
+    def jtrimVersion = '2.0.1'
+
+    compile "org.jtrim2:jtrim-swing-property:${jtrimVersion}"
+
+    testCompile 'junit:junit:4.12'
+    testCompile 'com.google.guava:guava:14.0.1'
+    testCompile 'org.mockito:mockito-core:1.9.5'
+
+    providedRuntime netbeansModule('org.netbeans.modules', 'org-netbeans-modules-projectapi-nb')
+
+}
+
+task sourcesJar(type: Jar, dependsOn: classes, description: 'Creates a jar from the source files.') {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+artifacts {
+    archives jar
+    archives sourcesJar
+}
+
+uploadArchives.dependsOn tasks.nbm
+artifacts {
+    archives (tasks.nbm.outputFile) {
+        name = "${project.name}-${project.version}"
+        extension = 'nbm'
+        type = 'nbm'
+    }
+}

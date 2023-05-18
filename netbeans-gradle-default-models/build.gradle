@@ -1,0 +1,129 @@
+apply plugin: 'groovy'
+apply plugin: 'custom-java-compilers'
+apply plugin: 'nb-gradle-maven-publish'
+
+sourceCompatibility = '1.6'
+targetCompatibility = sourceCompatibility
+
+String gradleVersion = '5.0'
+List otherGradleVersions = ['2.6', '2.9', '2.12', '2.14.1', '3.0', '4.10.2']
+
+ext.scriptFile = { String fileName ->
+    return new File(new File(rootDir, 'gradle'), fileName)
+}
+
+repositories {
+    mavenCentral()
+
+    maven {
+        url 'http://repo.gradle.org/gradle/libs-releases-local'
+    }
+
+    maven {
+        url 'http://repo.gradle.org/gradle/libs-snapshots-local'
+    }
+
+    ivy {
+        // This "repository" was added only as a hack to download
+        // the Gradle distribution at http://services.gradle.org/distributions/gradle-1.8-bin.zip
+        url 'http://services.gradle.org'
+        layout 'pattern', {
+            artifact '[organisation]/[artifact]-[revision].[ext]'
+        }
+    }
+}
+
+sourceSets {
+    main {
+        groovy.srcDirs = []
+    }
+    modelBuilders {
+        compileClasspath += main.output
+        java.srcDirs = []
+    }
+    test {
+        groovy.srcDirs = []
+
+        compileClasspath += configurations.modelBuildersCompile
+        runtimeClasspath -= main.output
+        runtimeClasspath += files(jar.archivePath)
+    }
+}
+
+configurations {
+    modelBuildersCompile.extendsFrom compile
+    modelBuildersCompile.exclude module: 'gradle-tooling-api'
+}
+
+compileTestJava.dependsOn(jar)
+
+jar {
+    from sourceSets.modelBuilders.output
+    ext {
+        netBeansSourceSets = [sourceSets.main, sourceSets.modelBuilders]
+    }
+}
+
+task sourcesJar(type: Jar, dependsOn: classes, description: 'Creates a jar from the source files.') {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+    from sourceSets.modelBuilders.allSource
+}
+
+artifacts {
+    archives jar
+    archives sourcesJar
+}
+
+dependencies {
+    compile group: 'org.gradle', name: 'gradle-tooling-api', version: gradleVersion
+    modelBuildersCompileOnly group: 'org.codehaus.groovy', name: 'groovy-all', version: '1.8.6'
+
+    def gradleApiDependency = new org.netbeans.gradle.build.ZippedJarsFileCollection(
+        project,
+        'distributions:gradle:2.6-bin@zip',
+        ['gradle-api'],
+        ['gradle-2.6', 'lib']
+    )
+    modelBuildersCompileOnly gradleApiDependency
+
+    testCompile group: 'junit', name: 'junit', version: '4.11'
+    testCompile group: 'org.mockito', name: 'mockito-core', version: '1.9.5'
+}
+
+setTestedGradleVersion(test, gradleVersion)
+task testAll {
+    dependsOn test
+}
+
+otherGradleVersions.each { String otherGradleVersion ->
+    def currentTask = createTestTask(otherGradleVersion)
+    testAll.dependsOn currentTask
+}
+
+task testAllFiltered {
+    dependsOn 'testGradle2.6'
+    dependsOn test
+}
+
+// Create the custom test task for the specific version for consistency
+createTestTask(gradleVersion)
+
+afterEvaluate {
+    System.setProperty('line.separator', '\n')
+}
+
+def createTestTask(String gradleVersion) {
+    Set daemonTestPackagePatterns = ['org/netbeans/gradle/model/java/**']
+
+    return task(['type': Test], "testGradle${gradleVersion}", { testTask ->
+        setTestedGradleVersion(testTask, gradleVersion)
+        daemonTestPackagePatterns.each { pattern ->
+            testTask.include pattern
+        }
+    })
+}
+
+def setTestedGradleVersion(def testTask, String gradleVersion) {
+    testTask.systemProperty 'TESTED_GRADLE_DAEMON_VERSION', gradleVersion
+}

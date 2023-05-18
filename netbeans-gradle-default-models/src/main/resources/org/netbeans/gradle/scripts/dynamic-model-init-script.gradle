@@ -1,0 +1,66 @@
+import org.gradle.tooling.provider.model.*
+import org.netbeans.gradle.model.internal.*
+
+initscript {
+    dependencies {
+        classpath files($NB_BOOT_CLASSPATH)
+    }
+}
+
+class DynamicGradleModelPlugin implements Plugin<Project> {
+    private final ToolingModelBuilderRegistry registry
+
+    @javax.inject.Inject
+    public DynamicGradleModelPlugin(ToolingModelBuilderRegistry registry) {
+        this.registry = registry
+    }
+
+    public void apply(Project project) {
+        def input = project.inputForDynamicGradleModelPlugin
+        def classLoader = project.classLoaderForDynamicGradleModelPlugin
+        registry.register(new DynamicModelLoader(input, classLoader))
+    }
+}
+
+ClassLoader scriptClassLoader = DynamicModelLoader.class.getClassLoader()
+def modelQueryInput = deserialize(new File($INPUT_FILE), scriptClassLoader)
+
+gradle.allprojects { project ->
+    project.ext.inputForDynamicGradleModelPlugin = modelQueryInput
+    project.ext.classLoaderForDynamicGradleModelPlugin = scriptClassLoader
+    project.apply plugin: DynamicGradleModelPlugin
+}
+
+private Object deserialize(File inputFile, ClassLoader classLoader) {
+    InputStream fileInputStream = new FileInputStream(inputFile)
+    try {
+        ObjectInputStream serializedInput = new CustomClassObjectInputStream(classLoader, fileInputStream)
+        try {
+            return serializedInput.readObject()
+        } finally {
+            serializedInput.close()
+        }
+    } finally {
+        fileInputStream.close()
+    }
+}
+
+class CustomClassObjectInputStream extends ObjectInputStream {
+    private final ClassLoader classLoader;
+
+    public CustomClassObjectInputStream(ClassLoader classLoader, InputStream input) throws IOException {
+        super(input);
+
+        this.classLoader = classLoader;
+    }
+
+    @Override
+    protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
+        try {
+            return Class.forName(desc.getName(), false, classLoader);
+        } catch (ClassNotFoundException ex) {
+            // Needed for primitive types
+            return super.resolveClass(desc);
+        }
+    }
+}
