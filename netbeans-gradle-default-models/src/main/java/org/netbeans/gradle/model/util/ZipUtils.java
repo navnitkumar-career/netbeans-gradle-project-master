@@ -1,5 +1,6 @@
 package org.netbeans.gradle.model.util;
 
+import io.github.pixee.security.ZipSecurity;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -65,7 +66,7 @@ public final class ZipUtils {
         if (destDir == null) throw new NullPointerException("destDir");
 
         final int BUFFER = 2048;
-        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(input));
+        ZipInputStream zis = ZipSecurity.createHardenedInputStream(new BufferedInputStream(input));
         try {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
