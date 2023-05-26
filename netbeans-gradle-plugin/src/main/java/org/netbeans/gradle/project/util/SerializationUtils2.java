@@ -1,5 +1,6 @@
 package org.netbeans.gradle.project.util;
 
+import io.github.pixee.security.ObjectInputFilters;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
@@ -19,6 +20,7 @@ public final class SerializationUtils2 {
     public static Object deserializeFile(Path file) throws IOException {
         try (InputStream fileInput = Files.newInputStream(file);
                 ObjectInputStream input = new ObjectInputStream(fileInput)) {
+            ObjectInputFilters.enableObjectFilterIfUnprotected(input);
             return input.readObject();
         } catch (ClassNotFoundException ex) {
             throw new IOException(ex);
