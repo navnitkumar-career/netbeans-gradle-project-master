@@ -1,5 +1,6 @@
 package org.netbeans.gradle.project.properties.ui;
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
@@ -72,7 +73,7 @@ public class ScriptAndTasksPanel extends javax.swing.JPanel implements ProfileEd
         List<String> result = new ArrayList<>();
 
         BufferedReader reader = new BufferedReader(new StringReader(str));
-        for (String line = reader.readLine(); line != null; line = reader.readLine()) {
+        for (String line = BoundedLineReader.readLine(reader, 1000000); line != null; line = BoundedLineReader.readLine(reader, 1000000)) {
             if (!line.trim().isEmpty()) {
                 result.add(line);
             }
