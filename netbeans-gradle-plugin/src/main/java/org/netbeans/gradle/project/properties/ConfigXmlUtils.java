@@ -1,5 +1,6 @@
 package org.netbeans.gradle.project.properties;
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
@@ -560,7 +561,7 @@ final class ConfigXmlUtils {
             BufferedReader configContent = new BufferedReader(new StringReader(fileOutput));
 
             StringBuilder newFileStrContent = new StringBuilder(fileOutput.length());
-            for (String line = configContent.readLine(); line != null; line = configContent.readLine()) {
+            for (String line = BoundedLineReader.readLine(configContent, 1000000); line != null; line = BoundedLineReader.readLine(configContent, 1000000)) {
                 newFileStrContent.append(line);
                 newFileStrContent.append(lineSeparator);
             }
