@@ -1,5 +1,6 @@
 package org.netbeans.gradle.project.util;
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -90,10 +91,10 @@ public final class StringUtils {
 
         List<String> lines = new ArrayList<>();
         BufferedReader reader = new BufferedReader(new StringReader(output));
-        String line = reader.readLine();
+        String line = BoundedLineReader.readLine(reader, 1000000);
         while (line != null) {
             lines.add(line);
-            line = reader.readLine();
+            line = BoundedLineReader.readLine(reader, 1000000);
         }
         return lines;
     }
