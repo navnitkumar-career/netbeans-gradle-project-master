@@ -1,5 +1,6 @@
 package org.netbeans.gradle.project.properties.ui;
 
+import io.github.pixee.security.BoundedLineReader;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
@@ -152,7 +153,7 @@ public class CustomVariablesPanel extends javax.swing.JPanel implements ProfileE
 
         BufferedReader reader = new BufferedReader(new StringReader(propertiesStr));
         try {
-            for (String line = reader.readLine(); line != null; line = reader.readLine()) {
+            for (String line = BoundedLineReader.readLine(reader, 1000000); line != null; line = BoundedLineReader.readLine(reader, 1000000)) {
                 vars.add(parse(line));
             }
         } catch (IOException ex) {
