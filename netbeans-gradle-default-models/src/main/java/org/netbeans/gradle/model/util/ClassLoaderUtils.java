@@ -1,5 +1,7 @@
 package org.netbeans.gradle.model.util;
 
+import io.github.pixee.security.HostValidator;
+import io.github.pixee.security.Urls;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
@@ -54,7 +56,7 @@ public final class ClassLoaderUtils {
 
     private static URL extractUrlFromJarUrl(URL url) {
         try {
-            return new URL(extractRawPathFromJarUrl(url));
+            return Urls.create(extractRawPathFromJarUrl(url), Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS);
         } catch (MalformedURLException ex) {
             throw new IllegalArgumentException("Unexpected URL: " + url, ex);
         }
