@@ -1,5 +1,7 @@
 package org.netbeans.gradle.project.output;
 
+import io.github.pixee.security.HostValidator;
+import io.github.pixee.security.Urls;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Objects;
@@ -31,7 +33,7 @@ public final class OutputUrlConsumer implements OutputLinkFinder {
 
         URL url;
         try {
-            url = new URL(StringUtils.stripSeperatorsFromEnd(line.substring(startIndex, endIndex)));
+            url = Urls.create(StringUtils.stripSeperatorsFromEnd(line.substring(startIndex, endIndex)), Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS);
         } catch (MalformedURLException ex) {
             return null;
         }
