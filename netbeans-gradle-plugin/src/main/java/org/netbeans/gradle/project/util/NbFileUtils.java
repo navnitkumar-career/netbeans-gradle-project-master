@@ -1,5 +1,7 @@
 package org.netbeans.gradle.project.util;
 
+import io.github.pixee.security.HostValidator;
+import io.github.pixee.security.Urls;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -155,7 +157,7 @@ public final class NbFileUtils {
 
     public static URL getSafeURL(String url) {
         try {
-            return new URL(url);
+            return Urls.create(url, Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS);
         } catch (MalformedURLException ex) {
             throw new RuntimeException(ex);
         }
