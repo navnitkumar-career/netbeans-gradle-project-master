@@ -1,5 +1,7 @@
 package org.netbeans.gradle.project.util;
 
+import io.github.pixee.security.HostValidator;
+import io.github.pixee.security.Urls;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -72,7 +74,7 @@ public final class DefaultUrlFactory {
         String urlStr = url.toExternalForm();
         if (!urlStr.endsWith("/")) {
             try {
-                return new URL(urlStr + "/");
+                return Urls.create(urlStr + "/", Urls.HTTP_PROTOCOLS, HostValidator.DENY_COMMON_INFRASTRUCTURE_TARGETS);
             } catch (MalformedURLException ex) {
                 LOGGER.log(Level.INFO, "Cannot set directory URL: " + url, ex);
                 // Go on and use whatever we have then.
